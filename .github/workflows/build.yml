@@ -1,4 +1,4 @@
-name: "Build Kernel from TransferNow (Auto-extract)"
+name: "Build Kernel from Direct Link"
 
 on:
   workflow_dispatch:
@@ -16,29 +16,33 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential bc curl git zip ftp gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi libssl-dev lftp zstd wget libfl-dev python2 python3 libarchive-tools
 
-      - name: "📥 Download kernel source from TransferNow (auto-extract)"
+      - name: "📥 Download kernel source from direct link"
         run: |
-          # الرابط الذي أرسلته
-          PAGE_URL="https://www.transfernow.net/d/start?utm_source=20260404qiVcnOr0&utm_term=i4o4au"
+          # الرابط المباشر الذي أرسلته
+          URL="https://www.transfernow.net/d/start?utm_source=20260404qiVcnOr0&utm_term=i4o4au"
           
-          # تحميل صفحة HTML
-          wget -O page.html "$PAGE_URL"
+          # تحميل الملف مع تجاوز التحقق من SSL (إذا لزم الأمر)
+          wget --content-disposition --no-check-certificate -O kernel_source.tar.gz "$URL"
           
-          # استخراج الرابط المباشر من الصفحة
-          DOWNLOAD_URL=$(grep -oP 'https://download\.transfernow\.net/[^"\047]+' page.html | head -1)
-          
-          if [ -z "$DOWNLOAD_URL" ]; then
-            echo "❌ لم يتم العثور على رابط تحميل مباشر. تأكد من صحة الرابط."
-            exit 1
+          # التحقق من أن الملف مضغوط بصيغة gzip
+          if file kernel_source.tar.gz | grep -q "gzip"; then
+            echo "✅ الملف بصيغة gzip صحيحة"
+            tar -xzf kernel_source.tar.gz
+          else
+            echo "⚠️ الملف ليس بصيغة gzip، قد يكون رابط صفحة HTML"
+            echo "محاولة استخراج الرابط المباشر من الصفحة..."
+            
+            # إذا كان الملف HTML، نحاول استخراج الرابط المباشر
+            DOWNLOAD_URL=$(grep -oP 'https://download\.transfernow\.net/[^"\047]+' kernel_source.tar.gz | head -1)
+            if [ -n "$DOWNLOAD_URL" ]; then
+              echo "✅ تم العثور على الرابط المباشر: $DOWNLOAD_URL"
+              wget -O kernel_source.tar.gz "$DOWNLOAD_URL"
+              tar -xzf kernel_source.tar.gz
+            else
+              echo "❌ لم نتمكن من العثور على الرابط المباشر"
+              exit 1
+            fi
           fi
-          
-          echo "✅ تم العثور على الرابط المباشر: $DOWNLOAD_URL"
-          
-          # تحميل الملف باستخدام الرابط المباشر
-          wget -O kernel_source.tar.gz "$DOWNLOAD_URL"
-          
-          # فك الضغط
-          tar -xzf kernel_source.tar.gz
           
           # إذا كان الملف المضغوط يحتوي على مجلد واحد، ننقل محتوياته إلى الأعلى
           if [ -d kernel ]; then
