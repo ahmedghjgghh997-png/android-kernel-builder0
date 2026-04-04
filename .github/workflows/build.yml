@@ -1,4 +1,4 @@
-name: Build Kernel with TransferNow (yt-dlp)
+name: FINAL Build for A35
 
 on:
   workflow_dispatch:
@@ -7,42 +7,33 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - name: Install dependencies
-      run: |
-        sudo apt update
-        sudo apt install -y build-essential bc curl git zip wget lz4 cpio python3
-        pip install yt-dlp
+    - name: Checkout kernel source (official for A35)
+      uses: actions/checkout@v4
+      with:
+        repository: raspiduino/sm-a356e-kernel
+        path: kernel
 
-    - name: Download kernel source using yt-dlp
-      run: |
-        yt-dlp -o kernel_source.tar.gz "https://www.transfernow.net/d/start?utm_source=20260404qiVcnOr0&utm_term=i4o4au"
-        tar -xzf kernel_source.tar.gz
-        # إذا كان الملف يحتوي على مجلد واحد، ننقل محتوياته
-        if [ -d kernel ]; then
-          mv kernel/* .
-          rm -rf kernel
-        fi
-
-    - name: Setup toolchain (Proton Clang)
+    - name: Setup Proton Clang
       run: |
         git clone --depth=1 https://github.com/kdrag0n/proton-clang.git clang
-        echo "${{ github.workspace }}/clang/bin" >> $GITHUB_PATH
+        echo "$GITHUB_WORKSPACE/clang/bin" >> $GITHUB_PATH
 
     - name: Integrate SukiSU Ultra
+      working-directory: ./kernel
       run: |
         curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -
 
-    - name: Build kernel
+    - name: Build Kernel
+      working-directory: ./kernel
       run: |
         export ARCH=arm64
         export ANDROID_MAJOR_VERSION=t
         export CROSS_COMPILE="aarch64-linux-gnu-"
-        export PATH="${{ github.workspace }}/clang/bin:$PATH"
         make exynos1380_a35x_defconfig
         make -j$(nproc)
 
     - name: Upload Image.gz
       uses: actions/upload-artifact@v4
       with:
-        name: Image.gz
-        path: arch/arm64/boot/Image.gz
+        name: Image.gz-A35-SukiSU
+        path: kernel/arch/arm64/boot/Image.gz
