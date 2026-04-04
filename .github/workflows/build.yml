@@ -1,4 +1,4 @@
-name: "Build Kernel from Direct Link (TransferNow)"
+name: "Build Kernel from TransferNow (Auto-extract)"
 
 on:
   workflow_dispatch:
@@ -16,27 +16,41 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential bc curl git zip ftp gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi libssl-dev lftp zstd wget libfl-dev python2 python3 libarchive-tools
 
-      - name: "📥 Download kernel source from TransferNow"
+      - name: "📥 Download kernel source from TransferNow (auto-extract)"
         run: |
-          # رابط الملف الذي رفعته
-          URL="https://www.transfernow.net/dl/20260404qiVcnOr0"
-          wget -O kernel_source.tar.gz "$URL"
+          # الرابط الذي أرسلته
+          PAGE_URL="https://www.transfernow.net/d/start?utm_source=20260404qiVcnOr0&utm_term=i4o4au"
+          
+          # تحميل صفحة HTML
+          wget -O page.html "$PAGE_URL"
+          
+          # استخراج الرابط المباشر من الصفحة
+          DOWNLOAD_URL=$(grep -oP 'https://download\.transfernow\.net/[^"\047]+' page.html | head -1)
+          
+          if [ -z "$DOWNLOAD_URL" ]; then
+            echo "❌ لم يتم العثور على رابط تحميل مباشر. تأكد من صحة الرابط."
+            exit 1
+          fi
+          
+          echo "✅ تم العثور على الرابط المباشر: $DOWNLOAD_URL"
+          
+          # تحميل الملف باستخدام الرابط المباشر
+          wget -O kernel_source.tar.gz "$DOWNLOAD_URL"
+          
+          # فك الضغط
           tar -xzf kernel_source.tar.gz
-          # بعد فك الضغط، قد يكون هناك مجلد واحد (مثل kernel). ننقل محتوياته إلى جذر العمل.
+          
+          # إذا كان الملف المضغوط يحتوي على مجلد واحد، ننقل محتوياته إلى الأعلى
           if [ -d kernel ]; then
             mv kernel/* .
             rm -rf kernel
           fi
-          # إذا كان الملف المضغوط يخرج محتويات مباشرة (بدون مجلد kernel)، فكل شيء جيد.
 
       - name: "💫 Get toolchains (Proton Clang + GCC)"
         run: |
-          # تحميل Proton Clang
           git clone --depth=1 https://github.com/kdrag0n/proton-clang.git toolchain
-          # تحميل GCC binutils (للمساعدة في الربط)
           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git gcc64
           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9.git gcc32
-          # إضافة المسارات
           echo "${{ github.workspace }}/toolchain/bin" >> $GITHUB_PATH
           echo "${{ github.workspace }}/gcc64/bin" >> $GITHUB_PATH
           echo "${{ github.workspace }}/gcc32/bin" >> $GITHUB_PATH
@@ -46,14 +60,14 @@ jobs:
           curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -
 
       - name: "👍 Make defconfig"
-        env:
-          ARCH: arm64
         run: |
           export ARCH=arm64
           export ANDROID_MAJOR_VERSION=t
           export CROSS_COMPILE="aarch64-linux-android-"
           export CROSS_COMPILE_ARM32="arm-linux-androideabi-"
           export CLANG_TRIPLE="aarch64-linux-gnu-"
+          export PATH="${{ github.workspace }}/toolchain/bin:${{ github.workspace }}/gcc64/bin:${{ github.workspace }}/gcc32/bin:$PATH"
+          
           # جرب هذا الاسم أولاً
           make O=out s5e8835-a35xjvxx_defconfig
           # إذا فشل، جرب: make O=out exynos1380_a35x_defconfig
@@ -75,9 +89,3 @@ jobs:
           path: out/arch/arm64/boot/Image.gz
           if-no-files-found: ignore
           retention-days: 7
-
-      - name: "❤️ Pack and upload AnyKernel3 (optional)"
-        run: |
-          # إذا كنت تريد حزمة AnyKernel3، يمكن إضافة خطوات هنا.
-          # لكن الملف Image.gz هو الأساس. يمكنك تحويله لاحقاً.
-          echo "Build completed. Download Image.gz from artifacts."
