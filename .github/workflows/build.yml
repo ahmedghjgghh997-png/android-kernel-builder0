@@ -1,4 +1,4 @@
-name: Build Kernel with TransferNow
+name: Build Kernel with TransferNow (yt-dlp)
 
 on:
   workflow_dispatch:
@@ -11,30 +11,13 @@ jobs:
       run: |
         sudo apt update
         sudo apt install -y build-essential bc curl git zip wget lz4 cpio python3
+        pip install yt-dlp
 
-    - name: Download kernel source
+    - name: Download kernel source using yt-dlp
       run: |
-        URL="https://www.transfernow.net/d/start?utm_source=20260404qiVcnOr0&utm_term=i4o4au"
-        # استخدام curl لمحاكاة المتصفح
-        curl -L -b cookies.txt -c cookies.txt \
-             -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
-             -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8" \
-             -H "Accept-Language: en-US,en;q=0.5" \
-             --compressed \
-             -o kernel_source.tar.gz \
-             "$URL"
-        
-        # إذا كان الملف صغيراً (صفحة HTML)، استخرج الرابط الحقيقي
-        SIZE=$(stat -c%s kernel_source.tar.gz)
-        if [ $SIZE -lt 1000000 ]; then
-          REAL_URL=$(grep -oP 'https://download\.transfernow\.net/[^"\047]+' kernel_source.tar.gz | head -1)
-          if [ -n "$REAL_URL" ]; then
-            wget -O kernel_source.tar.gz "$REAL_URL"
-          fi
-        fi
-        
+        yt-dlp -o kernel_source.tar.gz "https://www.transfernow.net/d/start?utm_source=20260404qiVcnOr0&utm_term=i4o4au"
         tar -xzf kernel_source.tar.gz
-        # تنظيم المجلدات (إذا كان هناك مجلد وحيد)
+        # إذا كان الملف يحتوي على مجلد واحد، ننقل محتوياته
         if [ -d kernel ]; then
           mv kernel/* .
           rm -rf kernel
@@ -55,7 +38,6 @@ jobs:
         export ANDROID_MAJOR_VERSION=t
         export CROSS_COMPILE="aarch64-linux-gnu-"
         export PATH="${{ github.workspace }}/clang/bin:$PATH"
-        
         make exynos1380_a35x_defconfig
         make -j$(nproc)
 
