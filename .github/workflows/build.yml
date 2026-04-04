@@ -1,75 +1,31 @@
-name: "Build Kernel with Direct Download"
-
-on:
-  workflow_dispatch:
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Install dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y build-essential bc curl git zip wget lz4 cpio python3
-
-      - name: Download kernel source (browser simulation)
-        run: |
-          # الرابط الذي يعمل معك في المتصفح
-          URL="https://www.transfernow.net/d/start?utm_source=20260404qiVcnOr0&utm_term=i4o4au"
-          
-          # استخدام curl مع محاكاة متصفح حقيقي
-          curl -L -b /tmp/cookies.txt -c /tmp/cookies.txt \
-               -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
-               -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
-               -H "Accept-Language: en-US,en;q=0.5" \
-               --compressed \
-               -o kernel_source.tar.gz \
-               "$URL"
-          
-          # التحقق من الحجم
-          SIZE=$(stat -c%s kernel_source.tar.gz)
-          echo "File size: $SIZE bytes"
-          
-          if [ $SIZE -lt 10000000 ]; then
-            echo "⚠️ File too small, trying to extract real download link..."
-            # محاولة استخراج الرابط الحقيقي من الصفحة
-            REAL_URL=$(grep -oP 'https://download\.transfernow\.net/[^"\047]+' kernel_source.tar.gz | head -1)
-            if [ -n "$REAL_URL" ]; then
-              echo "Found real URL: $REAL_URL"
-              wget -O kernel_source.tar.gz "$REAL_URL"
-            fi
-          fi
-          
-          # فك الضغط
-          tar -xzf kernel_source.tar.gz
-          
-          # تنظيم المجلدات
-          if [ -d kernel ]; then
-            mv kernel/* .
-            rm -rf kernel
-          fi
-
-      - name: Setup toolchain
-        run: |
-          git clone --depth=1 https://github.com/kdrag0n/proton-clang.git clang
-          echo "${{ github.workspace }}/clang/bin" >> $GITHUB_PATH
-
-      - name: Integrate SukiSU Ultra
-        run: |
-          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -
-
-      - name: Build kernel
-        run: |
-          export ARCH=arm64
-          export ANDROID_MAJOR_VERSION=t
-          export CROSS_COMPILE="aarch64-linux-gnu-"
-          export PATH="${{ github.workspace }}/clang/bin:$PATH"
-          
-          make s5e8835-a35xjvxx_defconfig
-          make -j$(nproc)
-
-      - name: Upload Image
-        uses: actions/upload-artifact@v4
-        with:
-          name: Image.gz
-          path: arch/arm64/boot/Image.gz
+- name: Download kernel source from TransferNow (fixed)
+  run: |
+    URL="https://www.transfernow.net/d/start?utm_source=20260404qiVcnOr0&utm_term=i4o4au"
+    # استخدام curl مع محاكاة متصفح
+    curl -L -b cookies.txt -c cookies.txt \
+         -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
+         -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8" \
+         -H "Accept-Language: en-US,en;q=0.5" \
+         -H "Referer: https://www.transfernow.net/" \
+         --compressed \
+         -o kernel_source.tar.gz \
+         "$URL"
+    
+    # التحقق من الحجم
+    SIZE=$(stat -c%s kernel_source.tar.gz)
+    echo "Downloaded size: $SIZE bytes"
+    
+    # إذا كان الحجم أقل من 1 ميجابايت، حاول استخراج الرابط الحقيقي
+    if [ $SIZE -lt 1000000 ]; then
+      echo "Small file detected, attempting to extract real download URL..."
+      REAL_URL=$(grep -oP 'https://download\.transfernow\.net/[^"\047]+' kernel_source.tar.gz | head -1)
+      if [ -n "$REAL_URL" ]; then
+        echo "Real URL found: $REAL_URL"
+        wget -O kernel_source.tar.gz "$REAL_URL"
+      else
+        echo "No real URL found. The file may be behind a click wall."
+        exit 1
+      fi
+    fi
+    
+    tar -xzf kernel_source.tar.gz
