@@ -1,4 +1,4 @@
-name: FINAL Build for A35
+name: Build A35 Kernel with SukiSU Ultra (Fixed)
 
 on:
   workflow_dispatch:
@@ -7,36 +7,50 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout kernel source (official for A35)
-      uses: actions/checkout@v4
-      with:
-        repository: raspiduino/sm-a356e-kernel
-        path: kernel
+      - name: Checkout kernel source (raspiduino/sm-a356e-kernel)
+        uses: actions/checkout@v4
+        with:
+          repository: raspiduino/sm-a356e-kernel
+          path: kernel
 
-    - name: Setup Proton Clang
-      run: |
-        git clone --depth=1 https://github.com/kdrag0n/proton-clang.git clang
-        echo "$GITHUB_WORKSPACE/clang/bin" >> $GITHUB_PATH
+      - name: Setup toolchain (Proton Clang)
+        run: |
+          git clone --depth=1 https://github.com/kdrag0n/proton-clang.git clang
+          echo "$GITHUB_WORKSPACE/clang/bin" >> $GITHUB_PATH
 
-    - name: Integrate SukiSU Ultra
-      working-directory: ./kernel
-      run: |
-        curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -
+      - name: Integrate SukiSU Ultra (KernelSU-Next)
+        working-directory: ./kernel
+        run: |
+          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -
 
-    - name: Build Kernel
-      working-directory: ./kernel
-      run: |
-        export ARCH=arm64
-        export ANDROID_MAJOR_VERSION=t
-        export CROSS_COMPILE="aarch64-linux-gnu-"
-        export LD=ld.lld
-        export LLVM=1
-        export LLVM_IAS=1
-        make O=out exynos1380_a35x_defconfig
-        make -j$(nproc) O=out LLVM=1 LLVM_IAS=1 LD=ld.lld
+      - name: Fix missing pahole and bcmp
+        working-directory: ./kernel
+        run: |
+          # تعطيل pahole
+          echo '#!/bin/bash' > scripts/pahole-flags.sh
+          echo 'echo' >> scripts/pahole-flags.sh
+          chmod +x scripts/pahole-flags.sh
+          # توفير دالة bcmp
+          echo '#include <string.h>' > bcmp_fix.c
+          echo 'int bcmp(const void *s1, const void *s2, size_t n) { return memcmp(s1, s2, n); }' >> bcmp_fix.c
+          clang -c bcmp_fix.c -o bcmp_fix.o
+          ar rcs libbcmp.a bcmp_fix.o
 
-    - name: Upload Image.gz
-      uses: actions/upload-artifact@v4
-      with:
-        name: Image.gz-A35-SukiSU
-        path: kernel/out/arch/arm64/boot/Image.gz
+      - name: Build kernel
+        working-directory: ./kernel
+        run: |
+          export ARCH=arm64
+          export ANDROID_MAJOR_VERSION=t
+          export CROSS_COMPILE="aarch64-linux-gnu-"
+          export HOSTCC=gcc
+          export HOSTLD=ld
+          export LD=ld.lld
+          export LDFLAGS="-L$PWD -lbcmp"
+          make O=out exynos1380_a35x_defconfig
+          make -j$(nproc) O=out HOSTCC=gcc HOSTLD=ld LD=ld.lld LDFLAGS="-L$PWD -lbcmp"
+
+      - name: Upload Image.gz
+        uses: actions/upload-artifact@v4
+        with:
+          name: Image.gz-A35-SukiSU
+          path: kernel/out/arch/arm64/boot/Image.gz
