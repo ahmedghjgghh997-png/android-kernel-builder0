@@ -23,30 +23,17 @@ jobs:
         run: |
           curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -
 
-      - name: Fix build environment (pahole + bcmp)
-        working-directory: ./kernel
-        run: |
-          echo '#!/bin/bash' > scripts/pahole-flags.sh
-          echo 'echo' >> scripts/pahole-flags.sh
-          chmod +x scripts/pahole-flags.sh
-          echo '#include <string.h>' > bcmp_fix.c
-          echo 'int bcmp(const void *s1, const void *s2, size_t n) { return memcmp(s1, s2, n); }' >> bcmp_fix.c
-          clang -c bcmp_fix.c -o bcmp_fix.o
-          ar rcs libbcmp.a bcmp_fix.o
-
       - name: Build kernel
         working-directory: ./kernel
         run: |
           export ARCH=arm64
           export ANDROID_MAJOR_VERSION=t
           export CROSS_COMPILE="aarch64-linux-gnu-"
-          export HOSTCC=gcc
-          export HOSTLD=ld
-          export LD=ld.lld
-          export LDFLAGS="-L$PWD -lbcmp"
+          export HOSTLDFLAGS="-fuse-ld=lld"
+          export LLVM=1
+          export LLVM_IAS=1
           make O=out exynos1380_a35x_defconfig
-          make -j$(nproc) O=out HOSTCC=gcc HOSTLD=ld LD=ld.lld LDFLAGS="-L$PWD -lbcmp"
-
+          make -j$(nproc) O=out
       - name: Upload Image.gz
         uses: actions/upload-artifact@v4
         with:
