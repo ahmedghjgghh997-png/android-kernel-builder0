@@ -1,4 +1,4 @@
-name: Build Kernel from Extracted Source
+name: Build Kernel with Extraction (Skip Conflicts)
 
 on:
   workflow_dispatch:
@@ -7,19 +7,30 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Download compressed kernel source
+      - name: Download kernel source
         run: |
           wget -O kernel.tar.gz "https://www.transfernow.net/dl/20260404qiVcnOr0"
+          SIZE=$(stat -c%s kernel.tar.gz)
+          echo "Size: $SIZE bytes"
+          if [ $SIZE -lt 100000000 ]; then
+            echo "File too small, aborting"
+            exit 1
+          fi
 
-      - name: Extract kernel source (crucial step)
+      - name: Extract kernel source (clean start)
         run: |
+          # حذف المجلد القديم لتجنب أي تعارض
+          rm -rf kernel_source
           mkdir kernel_source
-          tar -xzf kernel.tar.gz -C kernel_source
-          # بعد فك الضغط، قد يكون هناك مجلد واحد بداخله. ننقل محتوياته للأعلى.
+          # فك الضغط مع تجاهل الملفات الموجودة (إذا وجدت)
+          tar -xzf kernel.tar.gz -C kernel_source --skip-old-files 2>/dev/null || tar -xzf kernel.tar.gz -C kernel_source --overwrite
+          # إذا كان هناك مجلد فرعي واحد، انقل محتوياته
           if [ -d kernel_source/kernel ]; then
             mv kernel_source/kernel/* kernel_source/
-            rm -rf kernel_source/kernel
+            rmdir kernel_source/kernel
           fi
+          echo "Extraction done. Contents:"
+          ls -la kernel_source/ | head -20
 
       - name: Setup toolchain
         run: |
