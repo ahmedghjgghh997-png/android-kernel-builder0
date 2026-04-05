@@ -1,4 +1,4 @@
-name: Build A35 Kernel with SukiSU Ultra (Fixed)
+name: Build A35 Kernel with SukiSU Ultra (Final Fix)
 
 on:
   workflow_dispatch:
@@ -7,30 +7,28 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout kernel source (raspiduino/sm-a356e-kernel)
+      - name: Checkout kernel source
         uses: actions/checkout@v4
         with:
           repository: raspiduino/sm-a356e-kernel
           path: kernel
 
-      - name: Setup toolchain (Proton Clang)
+      - name: Setup Proton Clang
         run: |
           git clone --depth=1 https://github.com/kdrag0n/proton-clang.git clang
           echo "$GITHUB_WORKSPACE/clang/bin" >> $GITHUB_PATH
 
-      - name: Integrate SukiSU Ultra (KernelSU-Next)
+      - name: Integrate SukiSU Ultra
         working-directory: ./kernel
         run: |
           curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -
 
-      - name: Fix missing pahole and bcmp
+      - name: Fix build environment (pahole + bcmp)
         working-directory: ./kernel
         run: |
-          # تعطيل pahole
           echo '#!/bin/bash' > scripts/pahole-flags.sh
           echo 'echo' >> scripts/pahole-flags.sh
           chmod +x scripts/pahole-flags.sh
-          # توفير دالة bcmp
           echo '#include <string.h>' > bcmp_fix.c
           echo 'int bcmp(const void *s1, const void *s2, size_t n) { return memcmp(s1, s2, n); }' >> bcmp_fix.c
           clang -c bcmp_fix.c -o bcmp_fix.o
