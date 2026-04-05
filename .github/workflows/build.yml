@@ -1,4 +1,4 @@
-name: Build Kernel with Extraction (Skip Conflicts)
+name: Download from TransferNow with CLI
 
 on:
   workflow_dispatch:
@@ -7,32 +7,24 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Download kernel source
+      - name: Install transfernow-cli
         run: |
-          wget -O kernel.tar.gz "https://www.transfernow.net/dl/20260404qiVcnOr0"
-          SIZE=$(stat -c%s kernel.tar.gz)
-          echo "Size: $SIZE bytes"
-          if [ $SIZE -lt 100000000 ]; then
-            echo "File too small, aborting"
-            exit 1
-          fi
+          npm install -g transfernow-cli
 
-      - name: Extract kernel source (clean start)
+      - name: Download kernel source using transfernow-cli
         run: |
-          # حذف المجلد القديم لتجنب أي تعارض
-          rm -rf kernel_source
-          mkdir kernel_source
-          # فك الضغط مع تجاهل الملفات الموجودة (إذا وجدت)
-          tar -xzf kernel.tar.gz -C kernel_source --skip-old-files 2>/dev/null || tar -xzf kernel.tar.gz -C kernel_source --overwrite
-          # إذا كان هناك مجلد فرعي واحد، انقل محتوياته
-          if [ -d kernel_source/kernel ]; then
-            mv kernel_source/kernel/* kernel_source/
-            rmdir kernel_source/kernel
-          fi
-          echo "Extraction done. Contents:"
-          ls -la kernel_source/ | head -20
+          # الرابط الذي أرسلته
+          LINK="https://www.transfernow.net/d/start?utm_source=20260404qiVcnOr0&utm_term=i4o4au"
+          # استخراج معرف الملف (code)
+          CODE=$(echo "$LINK" | grep -oP 'utm_source=\K[^&]+')
+          echo "Code: $CODE"
+          # استخدام الأداة للتنزيل
+          transfernow download $CODE -o kernel_source.tar.gz
+          # التحقق من الحجم
+          ls -lh kernel_source.tar.gz
+          tar -xzf kernel_source.tar.gz
 
-      - name: Setup toolchain
+      - name: Setup toolchain (Proton Clang)
         run: |
           git clone --depth=1 https://github.com/kdrag0n/proton-clang.git clang
           echo "$GITHUB_WORKSPACE/clang/bin" >> $GITHUB_PATH
@@ -60,5 +52,5 @@ jobs:
       - name: Upload Image.gz
         uses: actions/upload-artifact@v4
         with:
-          name: Image.gz-A35
+          name: Image.gz-A35-SukiSU
           path: kernel_source/arch/arm64/boot/Image.gz
